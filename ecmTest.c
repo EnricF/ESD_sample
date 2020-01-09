@@ -3137,6 +3137,17 @@ int main(int argc, char *argv[])
     /* Say: Want to create device and master */
     hndDevice = ECM_INVALID_HANDLE;
 
+	//EF modifications
+	FILE * pFile;
+	pFile = fopen(argv[0], "r");
+	//pFile = fopen("C:\\workspace\\Base_project_Master_Config_sample.xml", "r");
+	if (pFile != NULL)
+	{
+		fprintf(stdout, "ENI configuration file selected: %s\n", argv[0]);
+		fclose(pFile);
+	}
+	//-----------------
+
     /* Create configuration based on ENI configuration file */
     result = ecmReadConfiguration(&cfgInitData, &hndDevice, &hndMaster);
     /* Free resources if configuration is stored in memory */
