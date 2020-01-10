@@ -171,6 +171,10 @@
 #include <getopt.h>
 #include <ecm.h>
 
+//EF mod
+#include "Global_var.h"
+//------
+
 /*********************************************************************/
 /*                            DEFINES                                */
 /*********************************************************************/
@@ -3265,6 +3269,56 @@ int main(int argc, char *argv[])
             ProcCtrl.ulCyclicPeriod, ProcCtrl.ulAcyclicPeriod);
     }
 
+	//EF mod ----------------------------------------
+	ECM_SLAVE_ADDR addr_slv[NUMCOMMANDS];
+	//addr_slv[0].p.ado = 0x010;//Just next node, single  slave(which register it is?)
+	//addr_slv[0].p.adp = 0x0000;//Just next node, single  slave (first salve, the only one available by now)
+	for (i = 0; i < NUMCOMMANDS; i++) {
+		addr_slv[i].p.adp = 0x0000;//it could be addr_slv[i].p.adp = 0x03E9, but is not working yet. Just keep 0x0000 by now
+	}
+	//NOTE: addresses are related to Slave::Memory (as seen in ESD Workbench)
+	//Other functions must be used for CoE communication (just like VS does)
+	//So, an offset value of 0x2000 may be a fast solution to aim to an specific registers, related to AXIS1 of SLAVE1 (there are no more axes neither slaves)
+
+	uint16_t usSize_data[NUMCOMMANDS];
+
+	uint16_t value = 0;//This is the value
+	void* pData = &value;//Pointer to the value
+	uint16_t pucCnt_val = 0;
+	uint16_t* pucCnt = &pucCnt_val;
+
+	//ADO value has an offset of 0x2000 (axis-1) as Ingenia documentation specifies.
+	//By default, addres_slv[any].p.ado = 0x0000
+	//Set previously in a for loop
+
+	//1.BRD
+	addr_slv[0].p.ado = 0x2010;//0x010 (Control Word - RW)
+	usSize_data[0] = sizeof(uint16_t);//4bytes == 32bits
+	//2.BRD
+	addr_slv[1].p.ado = 0x2011;//0x011 (Status Word - RO)
+	usSize_data[1] = sizeof(uint16_t);
+	//3.BWR
+	addr_slv[2].p.ado = 0x2014;//0x014 (Operation mode - RW)
+	usSize_data[2] = sizeof(int8_t);
+	//4.FPRD
+	addr_slv[3].p.adp = 0x03E9;//Slave address
+	addr_slv[3].p.ado = 0x2014;//0x015 (Operation mode display - RO) NOT WORKING YET! So it is changed to 0x2014
+	usSize_data[3] = sizeof(int8_t);
+	//5.BRD
+	addr_slv[4].p.ado = 0x2014;//0x015 (Operation mode display - RO) NOT WORKING YET! So it is changed to 0x2014
+	usSize_data[4] = sizeof(int8_t);
+	//6.FPWR
+	addr_slv[5].p.adp = 0x03E9;//Slave address
+	addr_slv[5].p.ado = 0x2010;//0x010 (Control Word - RW)
+	usSize_data[5] = sizeof(int16_t);
+	//7.BRD
+	addr_slv[6].p.ado = 0x2010;//0x010 (Control Word - RW)
+	usSize_data[6] = sizeof(int8_t);
+	//7.BRD
+	addr_slv[7].p.ado = 0x2014;//0x014 (Operation mode - RW)
+	usSize_data[7] = sizeof(int8_t);
+	//------------------------------------
+
     /* INIT -> OP loop */
     do {
         /* Wait some cycles */
@@ -3392,8 +3446,106 @@ int main(int argc, char *argv[])
                 ecmTestDcMonitoring(hndDevice, hndMaster);
             }
 
-            /*
-            * If the background worker task is running we just wait and
+			/*
+			* This is just a sample code
+			* Each step is done only once
+			* Each step is done fast and simple, to not take so much time on this
+			* Its main purpose is to:
+			*	1) Set operation mode to 1 == Profile Position
+			*	2) Set Control Word to 6,7 and 15. Check values (W-->R)
+			*	3) Set a new position
+			*	4) Set motor in motion to reach the new position. Control Word == 31
+            */
+
+			//Sends and async request to a slave
+			//ecmAsyncRequest(ECM_HANDLE hndMaster, uint8_t ucCmd, ECM_SLAVE_ADDR addr, uint16_t usSize,void *pData, uint16_t *pucCnt);
+
+			//Note that variables declaration and initialization is done before "OP" mode begins
+			switch (ecmAsyncRequest_cnt) {
+			case 0:
+				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, BRD, addr_slv[0], usSize_data[0], pData, pucCnt))
+				{
+					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
+				}
+				else {
+					fprintf(stdout, "Error\n");
+				}
+				break;
+			case 1:
+				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, BRD, addr_slv[1], usSize_data[1], pData, pucCnt))
+				{
+					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
+				}
+				else {
+					fprintf(stdout, "Error\n");
+				}
+				break;
+			case 2:
+				value = 3;
+				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, BWR, addr_slv[2], usSize_data[2], pData, pucCnt))
+				{
+					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
+				}
+				else {
+					fprintf(stdout, "Error\n");
+				}
+				break;
+			case 3:
+				value = 0;//dummy value, is RD operation so it will be overwritten. Just to avoid "misunderstandings"
+				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, FPRD, addr_slv[3], usSize_data[3], pData, pucCnt))
+				{
+					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
+				}
+				else {
+					fprintf(stdout, "Error\n");
+				}
+				break;
+			case 4:
+				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, BRD, addr_slv[4], usSize_data[4], pData, pucCnt))
+				{
+					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
+				}
+				else {
+					fprintf(stdout, "Error\n");
+				}
+				break;
+			case 5:
+				value = 1;
+				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, FPWR, addr_slv[5], usSize_data[5], pData, pucCnt))
+				{
+					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
+				}
+				else {
+					fprintf(stdout, "Error\n");
+				}
+				break;
+			case 6:
+				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, BRD, addr_slv[6], usSize_data[6], pData, pucCnt))
+				{
+					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
+				}
+				else {
+					fprintf(stdout, "Error\n");
+				}
+				break;
+			case 7:
+				value = 0;
+				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, BRD, addr_slv[7], usSize_data[7], pData, pucCnt))
+				{
+					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
+				}
+				else {
+					fprintf(stdout, "Error\n");
+				}
+				break;
+
+			default:
+				break;
+			}
+			ecmAsyncRequest_cnt++;//increase value for next iteration
+			
+
+            /* If the background worker task is running we just wait and
             * get called in our handler with each cycle. Without worker
             * task we have to drive our own I/O cycle and call the handler
             * in between.
