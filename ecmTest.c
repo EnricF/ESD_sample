@@ -251,7 +251,7 @@
 #define ECM_TEST_FLAG_SCAN_DICTIONARY     (1 <<  6)
 #define ECM_TEST_FLAG_REDUCE_CYCLIC_FRM   (1 <<  7)
 #define ECM_TEST_FLAG_PRINT_VARLIST       (1 <<  8)
-#define ECM_TEST_FLAG_PRINT_COPY_VECTOR   (1 <<  9)
+#define ECM_TEST_FLAG_PRINT_COPY_VECTOR   (1 <<  9)//EF mod: Default value is 1!!!
 #define ECM_TEST_FLAG_PRINT_STATISTICS    (1 << 10)
 #define ECM_TEST_FLAG_PRINT_ESC           (1 << 11)
 #define ECM_TEST_FLAG_NO_BROADCAST        (1 << 12)
@@ -1011,8 +1011,10 @@ static int CycleHandler(ECM_HANDLE hndDevice, int error)
     if (0 == ucData) {
         ucData = 1;
         } else {
-        ucData = ucData << 1;
+        ucData = ucData << 1;//EF comment, here is where the OUTPUT data is written!!!
         }
+	//EF mod: Just another value in output data!
+	ucData = 4;
 
     /* Update output data in process image */
     if (pucDio != 0) {
@@ -1621,10 +1623,12 @@ static void PrintCopyVector(ECM_HANDLE hndMaster)
     uint32_t ulEntries, ulSum = 0, i;
     int result;
 
+	//EF mod -- Uncomment next IF
+	//auto a = ulConfigFlags & ECM_TEST_FLAG_PRINT_COPY_VECTOR;
     /* Return if not configured */
-    if (0 == (ulConfigFlags & ECM_TEST_FLAG_PRINT_COPY_VECTOR)) {
+   /* if (0 == (ulConfigFlags & ECM_TEST_FLAG_PRINT_COPY_VECTOR)) {//Comment this IF to see these prints on screen
         return;
-    }
+    }*/
 
     if (ecmGetMasterState(hndMaster, &descMaster, NULL) != ECM_SUCCESS) {
         return;
@@ -2573,6 +2577,29 @@ static void ecmTestSetupProcesData(ECM_HANDLE hndMaster)
             printf("Failed to get reference to virtual variable Output\n");
         }
     }
+
+
+	//EF mod
+	/*
+	* This example tries to read a PDO mapping variable
+	*/
+
+	/*
+	* Get reference to process variables
+	*/
+	result = ecmLookupVariable(hndMaster, "Controlword",
+		&VarDesc, ECM_FLAG_GET_FIRST);
+	if (ECM_SUCCESS == result) {
+		result = ecmGetDataReference(hndMaster, ECM_OUTPUT_DATA,
+			VarDesc.ulBitOffs / 8, 2, (void **)&pucDio);
+		if (result != ECM_SUCCESS) {
+			printf("Failed to get reference to Controlword Output\n");
+		}
+	}
+
+	//Pointer to the memory location the reference pointer is stored
+	//(void **)&pucDio;
+	//----------------------------------------------
 }
 
 void ecmTestEventToString(uint32_t ulEvent)
@@ -3212,7 +3239,7 @@ int main(int argc, char *argv[])
     PrintVarList(hndMaster);
 
     /* Print copy vector */
-    PrintCopyVector(hndMaster);
+    PrintCopyVector(hndMaster);//EF mod
 
     /* Print statistic information */
     PrintStatistic(hndDevice, hndMaster);
@@ -3270,6 +3297,11 @@ int main(int argc, char *argv[])
     }
 
 	//EF mod ----------------------------------------
+	/*uint16_t value = 0;//This is the value
+	void* pData = &value;//Pointer to the value
+	uint16_t pucCnt_val = 0;
+	uint16_t* pucCnt = &pucCnt_val;
+	
 	ECM_SLAVE_ADDR addr_slv[NUMCOMMANDS];
 	//addr_slv[0].p.ado = 0x010;//Just next node, single  slave(which register it is?)
 	//addr_slv[0].p.adp = 0x0000;//Just next node, single  slave (first salve, the only one available by now)
@@ -3280,17 +3312,12 @@ int main(int argc, char *argv[])
 	//Other functions must be used for CoE communication (just like VS does)
 	//So, an offset value of 0x2000 may be a fast solution to aim to an specific registers, related to AXIS1 of SLAVE1 (there are no more axes neither slaves)
 
-	uint16_t usSize_data[NUMCOMMANDS];
-
-	uint16_t value = 0;//This is the value
-	void* pData = &value;//Pointer to the value
-	uint16_t pucCnt_val = 0;
-	uint16_t* pucCnt = &pucCnt_val;
-
+	//uint16_t usSize_data[NUMCOMMANDS];
+	   
 	//ADO value has an offset of 0x2000 (axis-1) as Ingenia documentation specifies.
 	//By default, addres_slv[any].p.ado = 0x0000
 	//Set previously in a for loop
-
+	
 	//1.BRD
 	addr_slv[0].p.ado = 0x2010;//0x010 (Control Word - RW)
 	usSize_data[0] = sizeof(uint16_t);//4bytes == 32bits
@@ -3314,15 +3341,15 @@ int main(int argc, char *argv[])
 	//7.BRD
 	addr_slv[6].p.ado = 0x2010;//0x010 (Control Word - RW)
 	usSize_data[6] = sizeof(int8_t);
-	//7.BRD
-	addr_slv[7].p.ado = 0x2014;//0x014 (Operation mode - RW)
-	usSize_data[7] = sizeof(int8_t);
+	//8.BRD
+	addr_slv[7].p.ado = 0x2030;//0x030 (Actual Position - RO)
+	usSize_data[7] = sizeof(int32_t);*/
 	//------------------------------------
 
     /* INIT -> OP loop */
     do {
         /* Wait some cycles */
-        ecmSleep(100);
+        ecmSleep(100);//EF mod, default value is 100 ms
 
         /* Do some I/O using async services in INIT state */
         PrintEscRegister(hndMaster);
@@ -3446,6 +3473,7 @@ int main(int argc, char *argv[])
                 ecmTestDcMonitoring(hndDevice, hndMaster);
             }
 
+			//EF mod
 			/*
 			* This is just a sample code
 			* Each step is done only once
@@ -3461,89 +3489,60 @@ int main(int argc, char *argv[])
 			//ecmAsyncRequest(ECM_HANDLE hndMaster, uint8_t ucCmd, ECM_SLAVE_ADDR addr, uint16_t usSize,void *pData, uint16_t *pucCnt);
 
 			//Note that variables declaration and initialization is done before "OP" mode begins
-			switch (ecmAsyncRequest_cnt) {
-			case 0:
-				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, BRD, addr_slv[0], usSize_data[0], pData, pucCnt))
-				{
-					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
-				}
-				else {
-					fprintf(stdout, "Error\n");
-				}
-				break;
-			case 1:
-				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, BRD, addr_slv[1], usSize_data[1], pData, pucCnt))
-				{
-					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
-				}
-				else {
-					fprintf(stdout, "Error\n");
-				}
-				break;
-			case 2:
-				value = 3;
-				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, BWR, addr_slv[2], usSize_data[2], pData, pucCnt))
-				{
-					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
-				}
-				else {
-					fprintf(stdout, "Error\n");
-				}
-				break;
-			case 3:
-				value = 0;//dummy value, is RD operation so it will be overwritten. Just to avoid "misunderstandings"
-				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, FPRD, addr_slv[3], usSize_data[3], pData, pucCnt))
-				{
-					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
-				}
-				else {
-					fprintf(stdout, "Error\n");
-				}
-				break;
-			case 4:
-				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, BRD, addr_slv[4], usSize_data[4], pData, pucCnt))
-				{
-					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
-				}
-				else {
-					fprintf(stdout, "Error\n");
-				}
-				break;
-			case 5:
-				value = 1;
-				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, FPWR, addr_slv[5], usSize_data[5], pData, pucCnt))
-				{
-					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
-				}
-				else {
-					fprintf(stdout, "Error\n");
-				}
-				break;
-			case 6:
-				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, BRD, addr_slv[6], usSize_data[6], pData, pucCnt))
-				{
-					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
-				}
-				else {
-					fprintf(stdout, "Error\n");
-				}
-				break;
-			case 7:
-				value = 0;
-				if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, BRD, addr_slv[7], usSize_data[7], pData, pucCnt))
-				{
-					//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
-				}
-				else {
-					fprintf(stdout, "Error\n");
-				}
-				break;
+			int i = ecmAsyncRequest_cnt;
+			if(i > NUMCOMMANDS-1)
+				i = NUMCOMMANDS-1;
 
-			default:
-				break;
+			switch (ecmAsyncRequest_cnt) {
+
+				case 0:
+					break;
+				case 1:
+					break;
+				case 2:
+					value = 1;//Operation mode: Profile position
+					break;
+				case 3:
+					value = 0;//dummy value, is RD operation so it will be overwritten. Just to avoid "misunderstandings"
+					break;
+				case 4:
+					break;
+				case 5:
+					value = 1;//Testing a Logical read/write operation
+					//value = 6; //Shutdown --> Control Word 0x010
+					break;
+				case 6:
+					//Testing a Logical read operation
+					//value = 7; //Switch on --> Control Word 0x010
+					break;
+				case 7:
+					value = 6; //Shutdown --> Control Word 0x010
+					//value = 15; //Switch on + operation enabled --> Control Word 0x010
+					break;
+				case 8:
+					break;
+				case 9:
+					break;
+				default:
+					break;
 			}
+
+			if (ECM_SUCCESS == ecmAsyncRequest(hndMaster, newCommands[i].cmdType, newCommands[i].address, newCommands[i].numBytes, pData, pucCnt))
+			{
+				//fprintf(stdout, "OK! Value BRD = 0x%04X\n", value);
+			}
+			else 
+			{
+				fprintf(stdout, "Error\n");
+			}
+
 			ecmAsyncRequest_cnt++;//increase value for next iteration
-			
+			/*pucCnt++;//increase pointer to WC counter
+
+			if (pucCnt > &pucCnt_val[NUMCOMMANDS-1]) {
+				pucCnt = &pucCnt_val[NUMCOMMANDS-1];//DON'T OVERFLOW!
+			}*/
+			//---------------------------------------
 
             /* If the background worker task is running we just wait and
             * get called in our handler with each cycle. Without worker
@@ -3551,7 +3550,7 @@ int main(int argc, char *argv[])
             * in between.
             */
             if (0 == (g_ulIoMode & ECM_TEST_IO_MODE_NO_CYC_WORKER)) {
-                ecmSleep(1000);
+                ecmSleep(100);//EF mod, default is 1000 ms
             } else {
                 for (j = 0; j < 100; j++) {
                     DoEcatIo(hndDevice);
