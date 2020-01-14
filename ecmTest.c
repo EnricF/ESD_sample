@@ -489,6 +489,11 @@ static uint16_t *pDevState = NULL, *pWcState = NULL;
 
 /* Reference to process variables */
 static uint8_t *pucDio = NULL;
+//static uint8_t *pucDio2 = NULL;//EF mod, for testing purposes
+//EF mod: extra pointers
+static uint8_t *pucDio_OperationMode	= NULL;//EF mod, "Operation mode" pointer
+static uint8_t *pucDio_TargetPosition	= NULL;//EF mod, "Target position" pointer
+static uint8_t *pucDio_TargetVelocity	= NULL;//EF mod, "Target velocity" pointer
 
 /*********************************************************************/
 /*                   FORWARD DECLARATIONS                            */
@@ -998,7 +1003,13 @@ static int CycleStartHandler(ECM_HANDLE hndDevice, int error)
  */
 static int CycleHandler(ECM_HANDLE hndDevice, int error)
 {
-    static uint8_t ucData;
+    static uint8_t	ucData;
+	static uint64_t ucData64;
+	static uint8_t	ucData_OperationMode;	//Sets Operation Mode register value
+	static uint8_t	ucData_TargetPosition;	//Sets Position value
+	static uint32_t cycleCounter;
+
+	static boolean faul_reset_is_done = FALSE;//To send a "RESET FAULT" just once
 
     (void)hndDevice;    /* Prevent compiler warning */
 
@@ -1007,18 +1018,62 @@ static int CycleHandler(ECM_HANDLE hndDevice, int error)
      */
     CycleHandlerErrorMessage(error, ECM_TEST_CYCLIC_HANDLER);
 
+	//EF mod
     /* Set output data */
-    if (0 == ucData) {
+    /*if (0 == ucData) {
         ucData = 1;
         } else {
         ucData = ucData << 1;//EF comment, here is where the OUTPUT data is written!!!
-        }
+        }*/
+	
 	//EF mod: Just another value in output data!
-	ucData = 4;
+	if ( cycleCounter < 500 ) {
+
+		if (!faul_reset_is_done) {
+			ucData = 128;//128: Fault reset
+			faul_reset_is_done = TRUE;
+
+			/* Set output data */
+			if (0 == ucData_OperationMode) {
+				ucData_OperationMode = 1;//Sets Operation Mode once and forever: Profile Position mode
+			}
+
+			/* Update output data in process image */
+			if (pucDio_OperationMode != 0) {
+				*pucDio_OperationMode = ucData_OperationMode;//EF mod, this pointer must be 10 bytes offset to "pucDio" --> OK!
+			}
+		}
+		else {
+			ucData	= 0;//0: default
+		}
+	}
+	else if ( cycleCounter < 600 ) {
+		ucData = 6; //6: Shutdown 
+	}
+
+	else if ( cycleCounter < 700 ) {
+		ucData = 7; //7: Switch on
+	}
+	else if ( cycleCounter < 720 ) {
+		ucData = 15;//15: Switch on
+		ucData_TargetPosition = 200;
+		if (*pucDio_TargetPosition == 0) {
+			*pucDio_TargetPosition = ucData_TargetPosition;
+		}
+	}
+	else {
+		ucData = 31;//ON! Motor should move now!
+		/*else {
+			ucData = 31;//ON! Motor should move now!
+		}*/
+	}
+	cycleCounter++;
+
+	//----------------------------
 
     /* Update output data in process image */
     if (pucDio != 0) {
-        *pucDio = ucData;
+        *pucDio = ucData;//Controlword!
     }
 
     /* If we start transmitting the data they may not be available yet */
@@ -1626,9 +1681,9 @@ static void PrintCopyVector(ECM_HANDLE hndMaster)
 	//EF mod -- Uncomment next IF
 	//auto a = ulConfigFlags & ECM_TEST_FLAG_PRINT_COPY_VECTOR;
     /* Return if not configured */
-   /* if (0 == (ulConfigFlags & ECM_TEST_FLAG_PRINT_COPY_VECTOR)) {//Comment this IF to see these prints on screen
+    if (0 == (ulConfigFlags & ECM_TEST_FLAG_PRINT_COPY_VECTOR)) {//Comment this IF to see these prints on screen
         return;
-    }*/
+    }
 
     if (ecmGetMasterState(hndMaster, &descMaster, NULL) != ECM_SUCCESS) {
         return;
@@ -2597,6 +2652,41 @@ static void ecmTestSetupProcesData(ECM_HANDLE hndMaster)
 		}
 	}
 
+	//Get Operation mode pointer
+	result = ecmLookupVariable(hndMaster, "Operation mode",
+		&VarDesc, ECM_FLAG_GET_FIRST);
+	if (ECM_SUCCESS == result) {
+		result = ecmGetDataReference(hndMaster, ECM_OUTPUT_DATA,
+			VarDesc.ulBitOffs / 8, 2, (void **)&pucDio_OperationMode);
+		if (result != ECM_SUCCESS) {
+			printf("Failed to get reference to Controlword Output\n");
+		}
+	}
+
+	//Get Target position pointer
+	result = ecmLookupVariable(hndMaster, "Target position",
+		&VarDesc, ECM_FLAG_GET_FIRST);
+	if (ECM_SUCCESS == result) {
+		result = ecmGetDataReference(hndMaster, ECM_OUTPUT_DATA,
+			VarDesc.ulBitOffs / 8, 2, (void **)&	pucDio_TargetPosition
+		);
+		if (result != ECM_SUCCESS) {
+			printf("Failed to get reference to Controlword Output\n");
+		}
+	}
+
+	//Get Target velocity pointer
+	result = ecmLookupVariable(hndMaster, "Target velocity",
+		&VarDesc, ECM_FLAG_GET_FIRST);
+	if (ECM_SUCCESS == result) {
+		result = ecmGetDataReference(hndMaster, ECM_OUTPUT_DATA,
+			VarDesc.ulBitOffs / 8, 2, (void **)&	pucDio_TargetVelocity
+		);
+		if (result != ECM_SUCCESS) {
+			printf("Failed to get reference to Controlword Output\n");
+		}
+	}
+
 	//Pointer to the memory location the reference pointer is stored
 	//(void **)&pucDio;
 	//----------------------------------------------
@@ -3489,7 +3579,7 @@ int main(int argc, char *argv[])
 			//ecmAsyncRequest(ECM_HANDLE hndMaster, uint8_t ucCmd, ECM_SLAVE_ADDR addr, uint16_t usSize,void *pData, uint16_t *pucCnt);
 
 			//Note that variables declaration and initialization is done before "OP" mode begins
-			int i = ecmAsyncRequest_cnt;
+			/*int i = ecmAsyncRequest_cnt;
 			if(i > NUMCOMMANDS-1)
 				i = NUMCOMMANDS-1;
 
@@ -3537,6 +3627,7 @@ int main(int argc, char *argv[])
 			}
 
 			ecmAsyncRequest_cnt++;//increase value for next iteration
+			*/
 			/*pucCnt++;//increase pointer to WC counter
 
 			if (pucCnt > &pucCnt_val[NUMCOMMANDS-1]) {
